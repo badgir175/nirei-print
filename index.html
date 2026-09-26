@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jPwj1FiMIqlQm3cP2CKcSwv1j4e2AjRZunnatxqacFA=' https://cdnjs.cloudflare.com; connect-src https://script.google.com https://script.googleusercontent.com https://cdn.jsdelivr.net; img-src data: blob:; style-src 'unsafe-inline'; font-src data: blob:; worker-src blob:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QkGkGt4qVo21H+qLXyYPYqMKRdFWeEAu2NLtPtaneKU=' https://cdnjs.cloudflare.com; connect-src https://script.google.com https://script.googleusercontent.com https://cdn.jsdelivr.net; img-src data: blob:; style-src 'unsafe-inline'; font-src data: blob:; worker-src blob:; base-uri 'none'; form-action 'none'">
 <title>見積書の印刷</title>
 <style>
 :root{--navy:#1f4e79;--line:#d9dee5;--muted:#5f6b7a;--bg:#f3f5f8}
@@ -96,11 +96,25 @@ ol{padding-left:20px;margin:8px 0}li{margin:4px 0}
   function showPrint() {
     $('status').innerHTML = '準備ができました。プリンターを選んで「印刷」を押してください。';
     $('act').hidden = false;
-    $('act').innerHTML = '<button class="go" id="pr">印刷する</button><a class="sub" id="dl">PDFをこの端末に保存する</a>' +
+    $('act').innerHTML = '<button class="go" id="pr">印刷する</button>' +
+      '<p class="m" style="margin:10px 0 4px"><b>プリンターが選べないときは↓</b>（プリンターのメーカーのアプリで印刷します）</p>' +
+      '<button class="go line" id="ap" style="background:#2d6aa3;margin-top:4px">プリンターのアプリに送る</button>' +
+      '<p class="m" style="margin:0">共有画面で「Epson Smart Panel」「Canon PRINT」「Brother Mobile Connect」など、お使いのプリンターのアプリを選んでください。</p>' +
+      '<div class="err" id="ng" hidden></div>' +
+      '<a class="sub" id="dl">PDFをこの端末に保存する</a>' +
       '<p class="m" style="margin:8px 0 0">印刷が終わったら、この画面は閉じてかまいません。</p>';
     $('pr').onclick = doPrint;
+    $('ap').onclick = function () { shareFile('プリンターのアプリに送れませんでした。「PDFをこの端末に保存する」で保存してから、プリンターのアプリで開いてください。'); };
     setDl();
     setTimeout(doPrint, 300); // 自動で印刷画面を出す（出ないときは「印刷する」を押す）
+  }
+  /** スマホの共有画面にPDFを渡す（LINE・プリンターのアプリなど） */
+  function shareFile(ngMsg, onDone) {
+    var ng = $('ng');
+    var can = false; try { can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { can = false; }
+    if (!can) { ng.hidden = false; ng.textContent = 'この端末では共有画面が使えません。' + ngMsg; return; }
+    navigator.share({ files: [file] }).then(function () { ng.hidden = true; if (onDone) onDone(); })
+      .catch(function (e) { if (e && e.name === 'AbortError') return; ng.hidden = false; ng.textContent = '送れませんでした（' + (e && e.message || e) + '）。' + ngMsg; });
   }
   function showConv() {
     var c = CONV[chain];
@@ -111,11 +125,7 @@ ol{padding-left:20px;margin:8px 0}li{margin:4px 0}
       '<div class="err" id="ng" hidden></div>';
     setDl();
     $('sh').onclick = function () {
-      var ng = $('ng');
-      var can = false; try { can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { can = false; }
-      if (!can) { ng.hidden = false; ng.textContent = 'この端末では共有画面が使えません。「PDFをこの端末に保存する」で保存してから、LINEの「' + c.bot + '」のトークで「＋」→「ファイル」から送ってください。'; return; }
-      navigator.share({ files: [file] }).then(function () { $('done').hidden = false; ng.hidden = true; })
-        .catch(function (e) { if (e && e.name === 'AbortError') return; ng.hidden = false; ng.textContent = '送れませんでした（' + (e && e.message || e) + '）。PDFを保存してからLINEで送ってください。'; });
+      shareFile('「PDFをこの端末に保存する」で保存してから、LINEの「' + c.bot + '」のトークで「＋」→「ファイル」から送ってください。', function () { $('done').hidden = false; });
     };
   }
   function setDl() { var a = $('dl'); a.href = URL.createObjectURL(file); a.download = file.name; }
