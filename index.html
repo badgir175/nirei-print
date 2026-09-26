@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QkGkGt4qVo21H+qLXyYPYqMKRdFWeEAu2NLtPtaneKU=' https://cdnjs.cloudflare.com; connect-src https://script.google.com https://script.googleusercontent.com https://cdn.jsdelivr.net; img-src data: blob:; style-src 'unsafe-inline'; font-src data: blob:; worker-src blob:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ktHFD6ng3Pjn3NOwDlq6vjRJI/Cmi2zzeNdUEBNDlZg=' https://cdnjs.cloudflare.com; connect-src https://script.google.com https://script.googleusercontent.com https://cdn.jsdelivr.net; img-src data: blob:; style-src 'unsafe-inline'; font-src data: blob:; worker-src blob:; base-uri 'none'; form-action 'none'">
 <title>見積書の印刷</title>
 <style>
 :root{--navy:#1f4e79;--line:#d9dee5;--muted:#5f6b7a;--bg:#f3f5f8}
@@ -56,14 +56,14 @@ ol{padding-left:20px;margin:8px 0}li{margin:4px 0}
   var $ = function (id) { return document.getElementById(id); };
   var q = {};
   location.hash.replace(/^#/, '').split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); });
-  var mode = q.m === 'conv' ? 'conv' : 'print', chain = CONV[q.c] ? q.c : 'seven';
+  var mode = q.m === 'conv' ? 'conv' : q.m === 'view' ? 'view' : 'print', chain = CONV[q.c] ? q.c : 'seven';
   // 合い言葉をアドレス欄と履歴から消す（あとから他の人に見られないように）
   try { history.replaceState(null, '', location.pathname); } catch (e) { /* */ }
   var fail = function (msg) { var d = document.createElement('div'); d.className = 'err'; d.textContent = msg; $('status').innerHTML = ''; $('status').appendChild(d); };
   if (!q.u || !q.k || !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(q.u)) {
-    fail('このページは、見積書アプリの「自宅で印刷」「コンビニで印刷」から開いてください。'); return;
+    fail(mode === 'view' ? 'このリンクは正しくありません。お店の人に、もう一度QRコードを出してもらってください。' : 'このページは、見積書アプリの「自宅で印刷」「コンビニで印刷」から開いてください。'); return;
   }
-  $('title').textContent = mode === 'conv' ? 'コンビニ（' + CONV[chain].name + '）で印刷' : '自宅で印刷';
+  $('title').textContent = mode === 'conv' ? 'コンビニ（' + CONV[chain].name + '）で印刷' : mode === 'view' ? '見積書' : '自宅で印刷';
 
   var file = null, printed = false;
   var SRI = {
@@ -121,6 +121,7 @@ ol{padding-left:20px;margin:8px 0}li{margin:4px 0}
     $('status').innerHTML = '下のボタンを押すと共有画面が開きます。<b>「LINE」→「' + c.bot + '」</b>を選んで送信してください。';
     $('act').hidden = false;
     $('act').innerHTML = '<button class="go line" id="sh">LINEで「' + c.bot + '」に送る</button><a class="sub" id="dl">PDFをこの端末に保存する</a>' +
+      '<p class="m" style="margin:0 0 6px">うまく送れないとき：「PDFをこの端末に保存する」→ LINEの「' + c.bot + '」のトークで「＋」→「ファイル」から保存したPDFを選ぶ</p>' +
       '<div class="ok" id="done" hidden><b>送ったら、あとは店で↓</b><ol>' + c.steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>' +
       '<div class="err" id="ng" hidden></div>';
     setDl();
@@ -128,17 +129,27 @@ ol{padding-left:20px;margin:8px 0}li{margin:4px 0}
       shareFile('「PDFをこの端末に保存する」で保存してから、LINEの「' + c.bot + '」のトークで「＋」→「ファイル」から送ってください。', function () { $('done').hidden = false; });
     };
   }
+  /** お客さんに見せる：見積書を表示するだけ（印刷画面は出さない） */
+  function showView(d) {
+    $('status').innerHTML = '';
+    $('status').appendChild(document.createTextNode(d.untilText ? '今日の' + d.untilText + 'まで見られます。' : ''));
+    $('act').hidden = false;
+    $('act').innerHTML = '<a class="go" id="dl" style="margin-bottom:0">PDFをこの端末に保存する</a>';
+    setDl();
+  }
   function setDl() { var a = $('dl'); a.href = URL.createObjectURL(file); a.download = file.name; }
 
   fetch(q.u + '?p=pdf&k=' + encodeURIComponent(q.k), { credentials: 'omit', referrerPolicy: 'no-referrer' })
     .then(function (r) { return r.json(); })
     .then(function (d) {
+      if (d && d.expired && mode === 'view') throw new Error('この見積書を見られる時間（30分）が過ぎました。お店の人に、もう一度QRコードを出してもらってください。');
       if (!d || d.error) throw new Error(d && d.error || '読み込めませんでした');
       $('who').textContent = (d.atena || '') + '　' + (d.no || '');
       var b = atob(d.b64), u = new Uint8Array(b.length);
       for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
       file = new File([u], d.name || '見積書.pdf', { type: 'application/pdf' });
       if (mode === 'conv') { showConv(); return render(u.slice()); }
+      if (mode === 'view') { $('status').innerHTML = '<span class="spin"></span>見積書を表示しています…'; return render(u.slice()).then(function () { showView(d); }); }
       $('status').innerHTML = '<span class="spin"></span>印刷の準備をしています…';
       return render(u.slice()).then(showPrint);
     })
